@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Terraform (lock file IS committed for reproducibility)
+terraform/.terraform/
+terraform/.cache/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+
+# Local tooling
+*.log
+
+# OS noise
+.DS_Store

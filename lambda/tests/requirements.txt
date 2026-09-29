@@ -1,0 +1,6 @@
+# Lambda uses only runtime-native boto3. This file is for the TEST and TOOLING
+# environments (local venv and CI): the emulation drivers and linters.
+boto3==1.35.29
+moto[s3,dynamodb]==5.0.18
+pytest==8.3.4
+ruff==0.6.9

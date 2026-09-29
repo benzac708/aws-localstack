@@ -1,0 +1,28 @@
+services:
+  localstack:
+    image: localstack/localstack:3.8.1
+    container_name: aws-localstack
+    ports:
+      # The single API port: every service is namespaced under one endpoint.
+      - "4566:4566"
+      # The per-service extended port range (used by Lambda's development
+      # endpoints); mapped so runtime behaviour matches a real deployment.
+      - "4510-4559:4510-4559"
+    environment:
+      # v3 starts services on demand; nothing to enumerate here.
+      - DEBUG=${LOCALSTACK_DEBUG:-0}
+      - PERSISTENCE=${LOCALSTACK_PERSISTENCE:-0}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - localstack-data:/var/lib/localstack
+    healthcheck:
+      # LocalStack's own readiness endpoint, not a TCP probe: TCP can be up
+      # while the edge router is still starting.
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+
+volumes:
+  localstack-data:

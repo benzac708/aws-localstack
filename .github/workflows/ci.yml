@@ -1,0 +1,108 @@
+name: ci
+
+# One job, three phases, and the order is the budget story: nothing that costs
+# (LocalStack boot, Lambda execution) runs until the cheap static gates are
+# green -- lint, unit tests, Terraform validate, secret scan, and then the
+# emulated end-to-end apply → smoke → destroy.
+#
+# This repository is public, so these runs consume free minutes. Third-party
+# actions are pinned to release tags rather than commit digests -- the same
+# documented trade-off as askvault's CI (a hand-copied digest that looks pinned
+# is worse than an honest tag).
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_VERSION: "1.16.2"
+
+jobs:
+  verify:
+    name: lint, unit, planless-validate, emulated apply
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install tooling (checksum-verified)
+        run: |
+          set -euo pipefail
+          cd "$(mktemp -d)"
+          BASE="https://releases.hashicorp.com/terraform/${TF_VERSION}"
+          curl -fsSL -O "${BASE}/terraform_${TF_VERSION}_linux_amd64.zip"
+          curl -fsSL -O "${BASE}/terraform_${TF_VERSION}_SHA256SUMS"
+          grep 'terraform_.*_linux_amd64.zip' "terraform_${TF_VERSION}_SHA256SUMS" \
+            | sha256sum -c -
+          unzip -q "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin
+
+      - name: uv environment
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -r lambda/tests/requirements.txt
+
+      - name: ruff check
+        run: .venv/bin/ruff check lambda/processor scripts
+
+      - name: ruff format
+        run: .venv/bin/ruff format --check lambda/processor scripts
+
+      - name: pytest (unit, moto)
+        run: |
+          cd lambda/processor/tests && PYTHONPATH=.. ../../.venv/bin/python -m pytest -q
+
+      - name: yamllint
+        run: uvx yamllint -c .yamllint.yml .github/ docker-compose.yml
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: terraform fmt + validate
+        run: |
+          cd terraform
+          terraform fmt -check -recursive
+          terraform init -backend=false -reconfigure
+          terraform validate
+
+      - name: Start LocalStack
+        run: |
+          docker compose up -d localstack
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:4566/_localstack/health >/dev/null 2>&1 && break
+            [ "$i" -lt 30 ] || {
+              echo "LocalStack did not become healthy in time"
+              docker compose logs localstack | tail -30
+              exit 1
+            }
+            sleep 2
+          done
+          curl -fsS http://localhost:4566/_localstack/health | head -1
+
+      - name: Terraform apply (emulated)
+        run: |
+          cd terraform
+          terraform init -backend=false -reconfigure
+          # Match the Lambda runtime architecture to the runner (see terraform/lambda.tf).
+          TF_VAR_lambda_architecture="$(uname -m | sed 's/aarch64/arm64/')" \
+            terraform apply -auto-approve
+
+      - name: Smoke test
+        run: |
+          .venv/bin/python scripts/smoke.py
+          cd terraform && terraform destroy -auto-approve
+      - name: Stop LocalStack
+        if: always()
+        run: docker compose down
