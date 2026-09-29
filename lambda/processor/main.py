@@ -38,6 +38,15 @@ def _endpoint():
     return None
 
 
+def _region():
+    """Real Lambda sets AWS_REGION; local and CI runs may not, and moto needs one."""
+    return (
+        os.environ.get("AWS_REGION")
+        or os.environ.get("AWS_DEFAULT_REGION")
+        or "us-east-1"
+    )
+
+
 def _digest_stats(payload):
     lines = payload.splitlines()
     return {
@@ -49,8 +58,10 @@ def _digest_stats(payload):
 
 
 def handler(event, context):
-    s3 = boto3.client("s3", endpoint_url=_endpoint())
-    table = boto3.resource("dynamodb", endpoint_url=_endpoint()).Table(RECORDS_TABLE)
+    s3 = boto3.client("s3", endpoint_url=_endpoint(), region_name=_region())
+    table = boto3.resource(
+        "dynamodb", endpoint_url=_endpoint(), region_name=_region()
+    ).Table(RECORDS_TABLE)
 
     processed = []
     for sqs_envelope in event["Records"]:
