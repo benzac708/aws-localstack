@@ -24,6 +24,11 @@ concurrency:
 
 env:
   TF_VERSION: "1.16.2"
+  # LocalStack accepts any credentials, but boto3 in the smoke test still
+  # requires them to sign requests; the runner has none.
+  AWS_ACCESS_KEY_ID: "test"
+  AWS_SECRET_ACCESS_KEY: "test"
+  AWS_DEFAULT_REGION: "us-east-1"
 
 jobs:
   verify:
