@@ -45,7 +45,7 @@ jobs:
           curl -fsSL -O "${BASE}/terraform_${TF_VERSION}_SHA256SUMS"
           grep 'terraform_.*_linux_amd64.zip' "terraform_${TF_VERSION}_SHA256SUMS" \
             | sha256sum -c -
-          unzip -q "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin
+          unzip -o -q "terraform_${TF_VERSION}_linux_amd64.zip" -d /usr/local/bin
 
       - name: uv environment
         run: |
