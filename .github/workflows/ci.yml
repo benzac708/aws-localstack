@@ -60,7 +60,7 @@ jobs:
 
       - name: pytest (unit, moto)
         run: |
-          cd lambda/processor/tests && PYTHONPATH=.. ../../.venv/bin/python -m pytest -q
+          PYTHONPATH=lambda/processor .venv/bin/python -m pytest lambda/processor/tests -q
 
       - name: yamllint
         run: uvx yamllint -c .yamllint.yml .github/ docker-compose.yml
